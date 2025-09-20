@@ -1,0 +1,10 @@
+streamlit
+pymupdf
+pytesseract
+Pillow
+faiss-cpu
+sentence-transformers
+numpy
+transformers
+requests
+reportlab
