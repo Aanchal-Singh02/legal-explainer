@@ -8,7 +8,7 @@ from auth import auth_ui
 import base64
 from typing import List, Tuple
 import fitz  # PyMuPDF
-import pytesseract
+import easyocr
 from PIL import Image
 import streamlit as st
 from sentence_transformers import SentenceTransformer
@@ -18,6 +18,7 @@ import requests
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+ocr_reader = easyocr.Reader(['en'])
 # Optional local generation (transformers). We import safely and handle missing deps.
 try:
     from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
@@ -34,32 +35,6 @@ if "username" not in st.session_state:
 auth_ui()
 if st.session_state["logged_in"]:
     st.write(f"Welcome {st.session_state['user_email']}! You are now on the main app page.")
-# ---------------------- Tesseract Auto-Setup ----------------------
-def setup_tesseract():
-    system = platform.system()
-    if system == "Windows":
-        possible_paths = [
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"
-        ]
-        for path in possible_paths:
-            if os.path.exists(path):
-                pytesseract.pytesseract.tesseract_cmd = path
-                return True
-        return False
-    else:
-        if shutil.which("tesseract"):
-            return True
-        return False
-
-if not setup_tesseract():
-    raise RuntimeError(
-        "❌ Tesseract OCR not found.\n"
-        "Please install it:\n"
-        "  • Windows: https://github.com/UB-Mannheim/tesseract/wiki\n"
-        "  • Linux: sudo apt-get install tesseract-ocr\n"
-        "  • Mac: brew install tesseract\n"
-    )
 
 # ---------------------- Configuration ----------------------
 HF_API_KEY = os.getenv("HF_API_KEY", "")
@@ -94,8 +69,9 @@ def extract_text_from_pdf(file_stream) -> str:
         else:
             pix = page.get_pixmap(dpi=200)
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            text = pytesseract.image_to_string(img)
-            texts.append(text)
+            result = ocr_reader.readtext(np.array(img), detail=0)
+            text = " ".join(result)
+
     return "\n".join(texts)
 
 def extract_text_from_image(file_stream) -> str:
