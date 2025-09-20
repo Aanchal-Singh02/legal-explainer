@@ -18,7 +18,12 @@ import requests
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-ocr_reader = easyocr.Reader(['en'])
+def get_ocr_reader():
+    """Return a cached EasyOCR reader to avoid repeated model downloads."""
+    return easyocr.Reader(['en'])
+
+ocr_reader = get_ocr_reader()
+
 # Optional local generation (transformers). We import safely and handle missing deps.
 try:
     from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
@@ -55,32 +60,46 @@ MAX_CHUNK_CHARS = 800
 
 # ---------------------- Utilities ----------------------
 def extract_text_from_pdf(file_stream) -> str:
+    """
+    Extract text from a PDF file.
+    Uses native PDF text if available, otherwise falls back to EasyOCR on images.
+    """
     try:
         file_stream.seek(0)
     except Exception:
         pass
+
     file_bytes = file_stream.read()
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     texts = []
+
     for page in doc:
+        # Try native text extraction first
         text = page.get_text("text")
         if text and text.strip():
             texts.append(text)
         else:
+            # Render page as image and use EasyOCR
             pix = page.get_pixmap(dpi=200)
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             result = ocr_reader.readtext(np.array(img), detail=0)
-            text = " ".join(result)
+            texts.append(" ".join(result))
 
     return "\n".join(texts)
 
+# ---------------------- Image Text Extraction ----------------------
 def extract_text_from_image(file_stream) -> str:
+    """
+    Extract text from an image (PNG/JPG).
+    """
     try:
         file_stream.seek(0)
     except Exception:
         pass
+
     image = Image.open(file_stream).convert("RGB")
-    text = pytesseract.image_to_string(image)
+    result = ocr_reader.readtext(np.array(image), detail=0)
+    text = " ".join(result)
     return text
 
 def clean_whitespace(s: str) -> str:
